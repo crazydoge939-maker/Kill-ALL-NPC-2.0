@@ -1,4 +1,3 @@
--- Основные переменные
 local killing = false
 local killInterval = 5
 local killedHumanoids = {}
@@ -100,21 +99,23 @@ local function highlightNPC(npc)
     game:GetService("Debris"):AddItem(highlight, 1)
 end
 
--- Проверка, что NPC не является игроком
+-- Обновленная функция проверки, что это NPC, а не игрок
 local function isValidNPC(npc)
     if not npc:FindFirstChildOfClass("Humanoid") then
         return false
     end
-    -- Исключить модели, связанные с игроками
-    -- Обычно персонажи игроков находятся в workspace.Players или имеют имя, содержащее "Player"
-    local parentName = npc.Parent.Name
-    if parentName == "Players" or parentName == game.Players.Name then
+    
+    -- Исключить модели, находящиеся в workspace.Players
+    if npc.Parent and npc.Parent.Name == "Players" then
         return false
     end
-    -- Также можно проверить, что это не LocalPlayer.Character
-    if game.Players.LocalPlayer.Character and npc == game.Players.LocalPlayer.Character then
+
+    -- Исключить локального персонажа
+    local localPlayerChar = game.Players.LocalPlayer.Character
+    if localPlayerChar and npc == localPlayerChar then
         return false
     end
+
     return true
 end
 
