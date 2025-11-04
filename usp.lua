@@ -71,8 +71,7 @@ end)
 
 game:GetService("UserInputService").InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
-        local delta = dragInput.Position - dragStart
+        local delta = input.Position - dragStart
         ScreenGui:TranslateToWorldSpace(startPos + delta)
     end
 end)
@@ -97,8 +96,26 @@ local function highlightNPC(npc)
     highlight.FillColor = Color3.fromRGB(255, 0, 0)
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.Parent = npc
-    -- Удаляем подсветку через 1 секунду, чтобы не накапливалось
+    -- Удаляем подсветку через 1 секунду
     game:GetService("Debris"):AddItem(highlight, 1)
+end
+
+-- Проверка, что NPC не является игроком
+local function isValidNPC(npc)
+    if not npc:FindFirstChildOfClass("Humanoid") then
+        return false
+    end
+    -- Исключить модели, связанные с игроками
+    -- Обычно персонажи игроков находятся в workspace.Players или имеют имя, содержащее "Player"
+    local parentName = npc.Parent.Name
+    if parentName == "Players" or parentName == game.Players.Name then
+        return false
+    end
+    -- Также можно проверить, что это не LocalPlayer.Character
+    if game.Players.LocalPlayer.Character and npc == game.Players.LocalPlayer.Character then
+        return false
+    end
+    return true
 end
 
 -- Основная логика убийства
@@ -109,8 +126,7 @@ local function killHumanoids()
             lastKillTime = currentTime
             -- Проходим по всем NPC
             for _, npc in pairs(workspace:GetDescendants()) do
-                if npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild("Head") then
-                    -- Убиваем NPC
+                if isValidNPC(npc) then
                     local humanoid = npc:FindFirstChildOfClass("Humanoid")
                     if humanoid and humanoid.Health > 0 then
                         humanoid.Health = 0
