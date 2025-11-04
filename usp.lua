@@ -1,138 +1,131 @@
-local autoKill = false
-local killIntervalSeconds = 5
-local killedCount = 0
+-- Скрипт для чита-инжектора
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Переменные
+local killingEnabled = false
+local killInterval = 5 -- секунды
+local lastKillTime = 0
 local killedHumanoids = {}
+local guiDragging = false
+local dragOffset = Vector2.new()
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = game:GetService("CoreGui")
-ScreenGui.Name = "Humanoid"
-
-local dragFrame = Instance.new("Frame")
-dragFrame.Size = UDim2.new(0, 250, 0, 50)
-dragFrame.Position = UDim2.new(0, 10, 0, 10)
-dragFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-dragFrame.BorderSizePixel = 2
-dragFrame.Parent = ScreenGui
-
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 100, 0, 30)
-toggleButton.Position = UDim2.new(0, 10, 0, 10)
-toggleButton.Text = "Вкл"
-toggleButton.Parent = dragFrame
-
-local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(0, 250, 0, 150)
-infoLabel.Position = UDim2.new(0, 0, 0, 60)
-infoLabel.Text = "Убитых: 0\n"
-infoLabel.TextWrapped = true
-infoLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-infoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-infoLabel.Parent = ScreenGui
-
-local timerLabel = Instance.new("TextLabel")
-timerLabel.Size = UDim2.new(0, 250, 0, 30)
-timerLabel.Position = UDim2.new(0, 0, 0, 210)
-timerLabel.Text = "Следующий цикл через: " .. tostring(killIntervalSeconds) .. " сек"
-timerLabel.TextWrapped = true
-timerLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-timerLabel.Parent = ScreenGui
+-- Создаем GUI
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local mainFrame = Instance.new("Frame", ScreenGui)
+mainFrame.Size = UDim2.new(0, 300, 0, 400)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30))
+mainFrame.Active = true
 
 -- Перетаскивание GUI
-local dragging = false
-local startPos, startGuiPos
-
-dragFrame.InputBegan:Connect(function(input)
+mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        startPos = input.Position
-        startGuiPos = ScreenGui.Position
+        guiDragging = true
+        local mousePos = UserInputService:GetMouseLocation()
+        dragOffset = Vector2.new(mousePos.X - mainFrame.AbsolutePosition.X, mousePos.Y - mainFrame.AbsolutePosition.Y)
     end
 end)
 
-dragFrame.InputEnded:Connect(function(input)
+mainFrame.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
+        guiDragging = false
     end
 end)
 
-dragFrame.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - startPos
-        ScreenGui.Position = startGuiPos + UDim2.new(0, delta.X, 0, delta.Y)
+RunService.Heartbeat:Connect(function()
+    if guiDragging then
+        local mousePos = UserInputService:GetMouseLocation()
+        mainFrame.Position = UDim2.new(0, mousePos.X - dragOffset.X, 0, mousePos.Y - dragOffset.Y)
     end
 end)
 
-local function updateConsole()
-    -- Полностью пересоздаем вывод
-    infoLabel.Text = "Убитых: " .. tostring(killedCount) .. "\n"
-    for name, count in pairs(killedHumanoids) do
-        infoLabel.Text = infoLabel.Text .. name .. " x" .. count .. "\n"
-    end
-end
-
-local function createHighlight(npc)
-    if npc:FindFirstChild("AutoKillHighlight") then return end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "AutoKillHighlight"
-    highlight.Adornee = npc
-    highlight.FillColor = Color3.fromRGB(255, 0, 0)
-    highlight.FillTransparency = 0.5
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.OutlineTransparency = 0
-    highlight.Parent = npc
-end
-
-local function refreshHighlights()
-    -- Создаем подсветку для новых NPC
-    for _, npc in pairs(workspace:GetChildren()) do
-        if npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild("AutoKillHighlight") == nil then
-            createHighlight(npc)
-        end
-    end
-end
+-- Создаем кнопку переключения режима
+local toggleButton = Instance.new("TextButton", mainFrame)
+toggleButton.Size = UDim2.new(1, -20, 0, 50)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.Text = "Начать убийство"
+toggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+toggleButton.TextColor3 = Color3.new(1,1,1)
+toggleButton.Font = Enum.Font.SourceSansBold
 
 toggleButton.MouseButton1Click:Connect(function()
-    autoKill = not autoKill
-    if autoKill then
-        toggleButton.Text = "Выкл"
-        -- Создаем подсветку для существующих NPC
-        refreshHighlights()
+    killingEnabled = not killingEnabled
+    if killingEnabled then
+        toggleButton.Text = "Остановить убийство"
+        -- Включаем подсветку
+        for _, npc in pairs(workspace:GetDescendants()) do
+            if npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+                local highlight = npc:FindFirstChildOfClass("Highlight")
+                if not highlight then
+                    highlight = Instance.new("Highlight", npc)
+                end
+                highlight.Adornee = npc:FindFirstChild("HumanoidRootPart")
+                highlight.FillColor = Color3.new(1, 0, 0)
+                highlight.OutlineColor = Color3.new(1, 0, 0)
+                highlight.Enabled = true
+            end
+        end
     else
-        toggleButton.Text = "Вкл"
-        -- Не удаляем подсветки, их можно оставить
+        toggleButton.Text = "Начать убийство"
+        -- Убираем подсветку
+        for _, npc in pairs(workspace:GetDescendants()) do
+            if npc:FindFirstChildOfClass("Highlight") then
+                npc:FindFirstChildOfClass("Highlight").Enabled = false
+            end
+        end
     end
 end)
 
-local timeLeft = killIntervalSeconds
+-- Создаем таблицу для отображения убийств
+local killsLabel = Instance.new("TextLabel", mainFrame)
+killsLabel.Size = UDim2.new(1, -20, 0, 100)
+killsLabel.Position = UDim2.new(0, 10, 0, 70)
+killsLabel.Text = "Убитые Humanoid:\n"
+killsLabel.TextColor3 = Color3.new(1,1,1)
+killsLabel.BackgroundColor3 = Color3.fromRGB(50,50,50)
+killsLabel.Font = Enum.Font.SourceSans
+killsLabel.TextWrapped = true
 
-while true do
-    wait(1)
-    if autoKill then
-        timeLeft = timeLeft - 1
-        if timeLeft <= 0 then
-            timeLeft = killIntervalSeconds
-            -- Удаляем все подсветки перед убийством (чтобы не мешали)
-            for _, npc in pairs(workspace:GetChildren()) do
-                local highlight = npc:FindFirstChild("AutoKillHighlight")
-                if highlight then
-                    highlight:Destroy()
+-- Создаем таймер индикатор
+local timerLabel = Instance.new("TextLabel", mainFrame)
+timerLabel.Size = UDim2.new(1, -20, 0, 30)
+timerLabel.Position = UDim2.new(0, 10, 0, 180)
+timerLabel.TextColor3 = Color3.new(1,1,1)
+timerLabel.BackgroundColor3 = Color3.fromRGB(50,50,50)
+timerLabel.Font = Enum.Font.SourceSans
+timerLabel.Text = "Следующий цикл через: 0 секунд"
+
+-- Основной цикл
+RunService.Heartbeat:Connect(function()
+    if killingEnabled then
+        local currentTime = os.time()
+        if currentTime - lastKillTime >= killInterval then
+            lastKillTime = currentTime
+            -- Убиваем NPC
+            for _, npc in pairs(workspace:GetDescendants()) do
+                if npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+                    -- Проверка, чтобы не убивать игроков
+                    local parent = npc.Parent
+                    if not parent:FindFirstChildOfClass("Player") then
+                        -- Убийство
+                        npc:FindFirstChildOfClass("Humanoid")..Health = 0
+                        local humanoidName = npc:FindFirstChildOfClass("Humanoid").Name
+                        killedHumanoids[humanoidName] = (killedHumanoids[humanoidName] or 0) + 1
+                    end
                 end
             end
-            -- Убиваем всех NPC
-            for _, npc in pairs(workspace:GetChildren()) do
-                local humanoid = npc:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    humanoid.Health = 0
-                    local name = npc.Name
-                    killedHumanoids[name] = (killedHumanoids[name] or 0) + 1
-                    killedCount = killedCount + 1
-                end
-            end
-            updateConsole()
-            -- Создаем подсветки для новых
-            refreshHighlights()
         end
-        timerLabel.Text = "Следующий цикл через: " .. tostring(timeLeft) .. " сек"
+        -- Обновление GUI
+        -- Удаляем старое содержание
+        killsLabel.Text = "Убитые Humanoid:\n"
+        for name, count in pairs(killedHumanoids) do
+            killsLabel.Text = killsLabel.Text .. name .. ": " .. count .. "\n"
+        end
+        -- Обновляем таймер
+        local timeLeft = math.max(0, killInterval - (os.time() - lastKillTime))
+        timerLabel.Text = "Следующий цикл через: " .. timeLeft .. " секунд"
     end
-end
+end)
