@@ -44,52 +44,52 @@ dragFrame.Parent = ScreenGui
 toggleButton.Parent = dragFrame
 
 local function updateGUI()
-    local text = "Убитых: " .. tostring(killedCount) .. "\n"
-    for name, count in pairs(killedHumanoids) do
-        text = text .. name .. " x" .. count .. "\n"
-    end
-    infoLabel.Text = text
+	local text = "Убитых: " .. tostring(killedCount) .. "\n"
+	for name, count in pairs(killedHumanoids) do
+		text = text .. name .. " x" .. count .. "\n"
+	end
+	infoLabel.Text = text
 end
 
 local function addHighlight(npc)
-    if npc:FindFirstChild("AutoKillHighlight") then return end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "AutoKillHighlight"
-    highlight.Adornee = npc
-    highlight.FillColor = Color3.fromRGB(255, 0, 0)
-    highlight.FillTransparency = 0.5
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.OutlineTransparency = 0
-    highlight.Parent = npc
+	if npc:FindFirstChild("AutoKillHighlight") then return end
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "AutoKillHighlight"
+	highlight.Adornee = npc
+	highlight.FillColor = Color3.fromRGB(255, 0, 0)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.OutlineTransparency = 0
+	highlight.Parent = npc
 end
 
 local function removeHighlights()
-    for _, npc in pairs(workspace:GetChildren()) do
-        if npc:FindFirstChild("AutoKillHighlight") then
-            npc.AutoKillHighlight:Destroy()
-        end
-    end
+	for _, npc in pairs(workspace:GetChildren()) do
+		if npc:FindFirstChild("AutoKillHighlight") then
+			npc.AutoKillHighlight:Destroy()
+		end
+	end
 end
 
 local function refreshHighlights()
-    removeHighlights()
-    for _, npc in pairs(workspace:GetChildren()) do
-        local humanoid = npc:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
-            addHighlight(npc)
-        end
-    end
+	removeHighlights()
+	for _, npc in pairs(workspace:GetChildren()) do
+		local humanoid = npc:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
+			addHighlight(npc)
+		end
+	end
 end
 
 toggleButton.MouseButton1Click:Connect(function()
-    autoKill = not autoKill
-    if autoKill then
-        toggleButton.Text = "Выкл"
-        refreshHighlights()
-    else
-        toggleButton.Text = "Вкл"
-        removeHighlights()
-    end
+	autoKill = not autoKill
+	if autoKill then
+		toggleButton.Text = "Выкл"
+		refreshHighlights()
+	else
+		toggleButton.Text = "Вкл"
+		removeHighlights()
+	end
 end)
 
 local timeLeft = killIntervalSeconds
@@ -99,56 +99,60 @@ local guiStartPosition
 
 -- Обработчик для начала перетаскивания
 dragFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStartPosition = input.Position
-        guiStartPosition = ScreenGui:GetPosition()
-    end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStartPosition = input.Position
+		guiStartPosition = ScreenGui:GetPosition()
+	end
 end)
 
 -- Обработчик для окончания перетаскивания
 dragFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
 end)
 
 -- Обработчик для перемещения
 dragFrame.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStartPosition
-        local newPosition = guiStartPosition + UDim2.new(0, delta.X, 0, delta.Y)
-        -- Ограничение по экрану (по желанию)
-        ScreenGui:SetPrimaryPartCFrame(CFrame.new(newPosition.X.Offset, newPosition.Y.Offset, 0))
-        -- Или проще: установить позицию через SetOffset
-        ScreenGui.Position = newPosition
-    end
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStartPosition
+		local newPosition = guiStartPosition + UDim2.new(0, delta.X, 0, delta.Y)
+		-- Ограничение по экрану (по желанию)
+		ScreenGui:SetPrimaryPartCFrame(CFrame.new(newPosition.X.Offset, newPosition.Y.Offset, 0))
+		-- Или проще: установить позицию через SetOffset
+		ScreenGui.Position = newPosition
+	end
 end)
 
 while true do
-    wait(1)
-    if autoKill then
-        timeLeft = timeLeft - 1
-        if timeLeft < 0 then
-            timeLeft = killIntervalSeconds
-            refreshHighlights()
+	wait(1)
+	if autoKill then
+		timeLeft = timeLeft - 1
+		if timeLeft < 0 then
+			timeLeft = killIntervalSeconds
+			-- Перед новым циклом очищаем таблицу убитых
+			killedHumanoids = {}
+			-- Обновляем подсветки
+			refreshHighlights()
 
-            local killedThisCycle = false
-            for _, npc in pairs(workspace:GetChildren()) do
-                local humanoid = npc:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
-                    humanoid.Health = 0
-                    local name = npc.Name
-                    killedHumanoids[name] = (killedHumanoids[name] or 0) + 1
-                    killedCount = killedCount + 1
-                    print("Убит: " .. name)
-                    killedThisCycle = true
-                end
-            end
-            if killedThisCycle then
-                updateGUI()
-            end
-        end
-        timerLabel.Text = "Следующий цикл через: " .. tostring(timeLeft) .. " сек"
-    end
+			local killedThisCycle = false
+			for _, npc in pairs(workspace:GetChildren()) do
+				local humanoid = npc:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
+					humanoid.Health = 0
+					local name = npc.Name
+					-- считаем только за текущий цикл
+					killedHumanoids[name] = (killedHumanoids[name] or 0) + 1
+					killedCount = killedCount + 1
+					print("Убит: " .. name)
+					killedThisCycle = true
+				end
+			end
+			if killedThisCycle then
+				updateGUI()
+			end
+		end
+		timerLabel.Text = "Следующий цикл через: " .. tostring(timeLeft) .. " сек"
+	end
 end
