@@ -78,7 +78,6 @@ end)
 -- Функция для обновления GUI с информацией о убитых NPC
 local function updateConsole()
     consoleText.Text = ""
-    local countMap = {}
     for name, count in pairs(killedHumanoids) do
         if count > 1 then
             consoleText.Text = consoleText.Text .. name .. " x" .. count .. "\n"
@@ -95,7 +94,6 @@ local function highlightNPC(npc)
     highlight.FillColor = Color3.fromRGB(255, 0, 0)
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.Parent = npc
-    -- Удаляем подсветку через 1 секунду
     game:GetService("Debris"):AddItem(highlight, 1)
 end
 
@@ -146,14 +144,13 @@ local function killHumanoids()
             wait(0.2)
             indicator.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         end
-        -- Обновляем таймер
         local timeRemaining = math.max(0, killInterval - (tick() - lastKillTime))
         timeLabel.Text = string.format("%.1f сек", timeRemaining)
         wait(0.5)
     end
 end
 
--- Обработка кнопки переключения режима
+-- Обработка кнопки
 toggleButton.MouseButton1Click:Connect(function()
     killToggle = not killToggle
     if killToggle then
