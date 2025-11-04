@@ -1,223 +1,177 @@
--- Объявляем переменные
-local killingEnabled = false
-local killInterval = 5 -- интервал в секундах
-local killTimer = 0
-local killedHumanoids = {}
-local gui = nil
-local toggleButton = nil
-local killModeLabel = nil
-local timerLabel = nil
-local indicator = nil
-local lastUpdateTime = 0
+-- Основные переменные
+local isKilling = false
+local killInterval = 5
+local killedHumanoidsCount = {}
+local lastKillTime = 0
+local runService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
--- Создаем главное GUI
-local function createGUI()
-    gui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-    gui.Name = "NPCKillerGUI"
+-- Создаем GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KillerGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.CoreGui
 
-    -- Основная рамка
-    local frame = Instance.new("Frame", gui)
-    frame.Size = UDim2.new(0, 300, 0, 400)
-    frame.Position = UDim2.new(0, 10, 0, 10)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    frame.BorderSizePixel = 2
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 250, 0, 150)
+Frame.Position = UDim2.new(0, 10, 0, 10)
+Frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Frame.Parent = ScreenGui
 
-    -- Перетаскиваемое окно
-    local dragging = false
-    local dragInput, dragStart, startPos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-        end
-    end)
-    frame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            frame.Position = startPos + UDim2.new(0, delta.X, 0, delta.Y)
-        end
-    end)
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 100, 0, 25)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.Text = "Начать убийство"
+ToggleButton.Parent = Frame
 
-    -- Кнопка переключения режима
-    toggleButton = Instance.new("TextButton", frame)
-    toggleButton.Size = UDim2.new(1, -20, 0, 30)
-    toggleButton.Position = UDim2.new(0, 10, 0, 10)
-    toggleButton.Text = "Включить убийство"
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+local KillCountLabel = Instance.new("TextLabel")
+KillCountLabel.Size = UDim2.new(0, 230, 0, 60)
+KillCountLabel.Position = UDim2.new(0, 10, 0, 45)
+KillCountLabel.Text = "Жертвы:\n"
+KillCountLabel.TextWrapped = true
+KillCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+KillCountLabel.BackgroundTransparency = 1
+KillCountLabel.TextColor3 = Color3.new(1,1,1)
+KillCountLabel.Parent = Frame
 
-    toggleButton.MouseButton1Click:Connect(function()
-        killingEnabled = not killingEnabled
-        if killingEnabled then
-            toggleButton.Text = "Выключить убийство"
-            toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-        else
-            toggleButton.Text = "Включить убийство"
-            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-        end
-    end)
+local ProgressBar = Instance.new("Frame")
+ProgressBar.Size = UDim2.new(0, 230, 0, 10)
+ProgressBar.Position = UDim2.new(0, 10, 0, 115)
+ProgressBar.BackgroundColor3 = Color3.fromRGB(0,255,0)
+ProgressBar.Parent = Frame
 
-    -- Метка для отображения режима убийства
-    killModeLabel = Instance.new("TextLabel", frame)
-    killModeLabel.Size = UDim2.new(1, -20, 0, 20)
-    killModeLabel.Position = UDim2.new(0, 10, 0, 50)
-    killModeLabel.Text = "Режим: Выключен"
-    killModeLabel.TextColor3 = Color3.new(1, 1, 1)
-    killModeLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-
-    -- Таймер для следующего убийства
-    timerLabel = Instance.new("TextLabel", frame)
-    timerLabel.Size = UDim2.new(1, -20, 0, 20)
-    timerLabel.Position = UDim2.new(0, 10, 0, 80)
-    timerLabel.Text = "Следующее убийство через: 5 сек"
-    timerLabel.TextColor3 = Color3.new(1, 1, 1)
-    timerLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-
-    -- Контейнер для отображения убитых
-    local killsContainer = Instance.new("ScrollingFrame", frame)
-    killsContainer.Size = UDim2.new(1, -20, 1, -120)
-    killsContainer.Position = UDim2.new(0, 10, 0, 110)
-    killsContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-    killsContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    killsContainer.BorderSizePixel = 1
-
-    -- Индикатор времени
-    indicator = Instance.new("Frame", frame)
-    indicator.Size = UDim2.new(0, 20, 0, 20)
-    indicator.Position = UDim2.new(0, 10, 0, 140)
-    indicator.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-
-    -- Надпись "Индикатор"
-    local indicatorLabel = Instance.new("TextLabel", frame)
-    indicatorLabel.Size = UDim2.new(0, 80, 0, 20)
-    indicatorLabel.Position = UDim2.new(0, 40, 0, 140)
-    indicatorLabel.Text = "След. убийство"
-    indicatorLabel.TextColor3 = Color3.new(1, 1, 1)
-    indicatorLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+local function updateProgressBar(progress)
+    ProgressBar.Size = UDim2.new(progress, 0, 0, 10)
 end
 
--- Обновление GUI
-local function updateGUI()
-    if not gui then return end
-    -- Обновляем режим
-    if killingEnabled then
-        killModeLabel.Text = "Режим: Включен"
+local function toggleKilling()
+    isKilling = not isKilling
+    if isKilling then
+        ToggleButton.Text = "Стоп"
     else
-        killModeLabel.Text = "Режим: Выключен"
-    end
-
-    -- Обновляем таймер
-    local timeLeft = math.max(0, killInterval - killTimer)
-    timerLabel.Text = "Следующее убийство через: " .. string.format("%.1f", timeLeft) .. " сек"
-
-    -- Обновляем индикатор
-    local color = killingEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    indicator.BackgroundColor3 = color
-end
-
--- Функция подсветки NPC
-local function highlightNPC(npc)
-    if not npc or not npc:FindFirstChildWhichIsA("BasePart") then return end
-    local highlight = npc:FindFirstChild("Highlight")
-    if not highlight then
-        highlight = Instance.new("Highlight")
-        highlight.Name = "Highlight"
-        highlight.Adornee = npc
-        highlight.FillColor = Color3.fromRGB(255, 0, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-        highlight.Parent = npc
-    end
-    highlight.Enabled = true
-end
-
-local function removeHighlight(npc)
-    local highlight = npc:FindFirstChild("Highlight")
-    if highlight then
-        highlight.Enabled = false
+        ToggleButton.Text = "Начать убийство"
     end
 end
 
--- Основная логика убийства NPC
-local function killNPCs()
-    for _, npc in pairs(workspace:GetChildren()) do
-        if npc:FindFirstChildWhichIsA("Humanoid") and npc:FindFirstChildWhichIsA("Humanoid").Health > 0 then
-            -- Убиваем NPC
-            local humanoid = npc:FindFirstChildWhichIsA("Humanoid")
-            humanoid.Health = 0
+ToggleButton.MouseButton1Click:Connect(toggleKilling)
 
-            -- Запоминаем имя Humanoid
-            local name = humanoid:GetFullName()
-            if killedHumanoids[name] then
-                killedHumanoids[name] = killedHumanoids[name] + 1
-            else
-                killedHumanoids[name] = 1
+-- Функция для поиска NPC
+local function findHumanoids()
+    local npcs = {}
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Humanoid") and v.Parent:FindFirstChildOfClass("Humanoid") then
+            -- исключаем игроков
+            if not game.Players:GetPlayerFromCharacter(v.Parent) then
+                table.insert(npcs, v.Parent)
             end
         end
     end
+    return npcs
 end
 
--- Обновление GUI с информацией о убитых
-local function refreshKilledDisplay()
-    if not gui then return end
-    local container = gui:FindFirstChild("ScrollingFrame")
-    if not container then return
+-- Подсветка NPC
+local function highlightNPC(npc)
+    if not npc then return end
+    local highlight = npc:FindFirstChild("Highlight")
+    if not highlight then
+        highlight = Instance.new("Highlight")
+        highlight.Adornee = npc
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+        highlight.Parent = npc
+    end
+    highlight.Enabled = isKilling
+end
 
-    -- Удаляем старое содержимое
-    for _, child in pairs(container:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child:Destroy()
+local function removeHighlight(npc)
+    if npc then
+        local highlight = npc:FindFirstChild("Highlight")
+        if highlight then
+            highlight.Enabled = false
         end
     end
-
-    -- Создаем новые строки
-    local yPos = 0
-    for name, count in pairs(killedHumanoids) do
-        local label = Instance.new("TextLabel", container)
-        label.Size = UDim2.new(1, -10, 0, 20)
-        label.Position = UDim2.new(0, 5, 0, yPos)
-        label.Text = name .. if count > 1 then " x" .. count else ""
-        label.TextColor3 = Color3.new(1, 1, 1)
-        label.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        yPos = yPos + 25
-    end
-    container.CanvasSize = UDim2.new(0, 0, 0, yPos)
 end
 
--- Главный цикл
-createGUI()
-
-while true do
-    wait(0.1)
-    updateGUI()
-
-    if killingEnabled then
-        killTimer = killTimer + 0.1
-        if killTimer >= killInterval then
-            -- Убиваем NPC
-            killNPCs()
-            refreshKilledDisplay()
-            killTimer = 0
+-- Основной цикл убийства
+runService.Heartbeat:Connect(function()
+    if isKilling then
+        local currentTime = tick()
+        local elapsed = currentTime - lastKillTime
+        updateProgressBar(elapsed / killInterval)
+        if elapsed >= killInterval then
+            -- Убить NPC
+            local npcs = findHumanoids()
+            for _, npc in pairs(npcs) do
+                local humanoid = npc:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    -- Подсветка
+                    highlightNPC(npc)
+                    -- Убийство
+                    humanoid.Health = 0
+                end
+            end
+            lastKillTime = currentTime
+            -- Обновление GUI
+            updateKillCount()
         end
     else
-        killTimer = 0
+        updateProgressBar(0)
     end
+end)
 
-    -- Обновляем подсветку
-    for _, npc in pairs(workspace:GetChildren()) do
-        if npc:FindFirstChildWhichIsA("Humanoid") and npc:FindFirstChildWhichIsA("Humanoid").Health > 0 then
-            highlightNPC(npc)
+-- Обновление счетчика
+local function updateKillCount()
+    killedHumanoidsCount = {}
+    for _, npc in pairs(findHumanoids()) do
+        local name = npc.Name
+        if killedHumanoidsCount[name] then
+            killedHumanoidsCount[name] = killedHumanoidsCount[name] + 1
         else
-            removeHighlight(npc)
+            killedHumanoidsCount[name] = 1
         end
     end
+    local displayText = "Жертвы:\n"
+    for name, count in pairs(killedHumanoidsCount) do
+        displayText = displayText .. name
+        if count > 1 then
+            displayText = displayText .. " x" .. count
+        end
+        displayText = displayText .. "\n"
+    end
+    KillCountLabel.Text = displayText
 end
+
+-- Обновление GUI каждые 0.5 сек
+while true do
+    wait(0.5)
+    updateKillCount()
+end
+
+-- Перемещение GUI
+local dragging = false
+local dragInput, dragStart, startPos
+
+Frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Frame.Position
+    end
+end)
+
+Frame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+Frame.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+        local delta = dragInput.Position - dragStart
+        Frame.Position = startPos + UDim2.new(0, delta.X, 0, delta.Y)
+    end
+end)
