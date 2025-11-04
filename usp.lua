@@ -32,6 +32,17 @@ timerLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 timerLabel.Parent = ScreenGui
 
+-- Создаем рамку для перетаскивания
+local dragFrame = Instance.new("Frame")
+dragFrame.Size = UDim2.new(0, 250, 0, 50)
+dragFrame.Position = UDim2.new(0, 10, 0, 10)
+dragFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+dragFrame.BorderSizePixel = 2
+dragFrame.Parent = ScreenGui
+
+-- Внутри рамки размещаем кнопку (чтобы не мешать перетаскиванию)
+toggleButton.Parent = dragFrame
+
 local function updateGUI()
     local text = "Убитых: " .. tostring(killedCount) .. "\n"
     for name, count in pairs(killedHumanoids) do
@@ -41,7 +52,6 @@ local function updateGUI()
 end
 
 local function addHighlight(npc)
-    -- Проверка, чтобы не добавлять повторно
     if npc:FindFirstChild("AutoKillHighlight") then return end
     local highlight = Instance.new("Highlight")
     highlight.Name = "AutoKillHighlight"
@@ -62,9 +72,7 @@ local function removeHighlights()
 end
 
 local function refreshHighlights()
-    -- Удаляем старые подсветки
     removeHighlights()
-    -- Добавляем ко всем текущим NPC
     for _, npc in pairs(workspace:GetChildren()) do
         local humanoid = npc:FindFirstChildOfClass("Humanoid")
         if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
@@ -77,47 +85,70 @@ toggleButton.MouseButton1Click:Connect(function()
     autoKill = not autoKill
     if autoKill then
         toggleButton.Text = "Выкл"
-        -- добавляем подсветку всем текущим NPC
         refreshHighlights()
     else
         toggleButton.Text = "Вкл"
-        -- убираем подсветки
         removeHighlights()
     end
 end)
 
-local timeLeft = killIntervalSeconds -- оставшееся время
+local timeLeft = killIntervalSeconds
+local dragging = false
+local dragStartPosition
+local guiStartPosition
+
+-- Обработчик для начала перетаскивания
+dragFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStartPosition = input.Position
+        guiStartPosition = ScreenGui:GetPosition()
+    end
+end)
+
+-- Обработчик для окончания перетаскивания
+dragFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- Обработчик для перемещения
+dragFrame.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPosition
+        local newPosition = guiStartPosition + UDim2.new(0, delta.X, 0, delta.Y)
+        -- Ограничение по экрану (по желанию)
+        ScreenGui:SetPrimaryPartCFrame(CFrame.new(newPosition.X.Offset, newPosition.Y.Offset, 0))
+        -- Или проще: установить позицию через SetOffset
+        ScreenGui.Position = newPosition
+    end
+end)
 
 while true do
     wait(1)
     if autoKill then
-        -- Обновляем таймер
         timeLeft = timeLeft - 1
         if timeLeft < 0 then
             timeLeft = killIntervalSeconds
-            -- Перед новым циклом очищаем подсветку и добавляем заново
             refreshHighlights()
 
             local killedThisCycle = false
-            -- Убиваем NPC
             for _, npc in pairs(workspace:GetChildren()) do
                 local humanoid = npc:FindFirstChildOfClass("Humanoid")
                 if humanoid and humanoid.Health > 0 and npc ~= game.Players.LocalPlayer.Character then
                     humanoid.Health = 0
                     local name = npc.Name
-                    -- Подсчет убитых по имени Humanoid
                     killedHumanoids[name] = (killedHumanoids[name] or 0) + 1
                     killedCount = killedCount + 1
                     print("Убит: " .. name)
                     killedThisCycle = true
                 end
             end
-
             if killedThisCycle then
                 updateGUI()
             end
         end
-        -- Обновляем отображение таймера
         timerLabel.Text = "Следующий цикл через: " .. tostring(timeLeft) .. " сек"
     end
 end
